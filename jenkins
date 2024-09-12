@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_REPO = 'guru6910/css.c2' // Optional: Update with your desired repository
+    }
+
+    stages {
+        stage('git-checkout') {
+            steps {
+                script {
+                    // Use Git plugin for better error handling and logging
+                    git branch: 'main', url: 'https://github.com/guru6910/CSS-jenkins.git'
+                }
+            }
+        }
+
+        stage('docker-build') {
+            steps {
+                sh 'docker build -t ${DOCKERHUB_REPO}:${BUILD_NUMBER} .' // Use environment variable for repo
+            }
+        }
+
+        stage('docker-push') (optional: Only if not using Minikube registry) {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-cred', passwordVariable: 'passwd', usernameVariable: 'uname')]) {
+                    sh "docker login -u ${env.uname} -p ${env.passwd}"
+                    sh "docker push ${DOCKERHUB_REPO}:${BUILD_NUMBER}"
+                }
+            }
+        }
+
+        stage('deploy-k8s') {
+            steps {
+                script {
+                    // Ensure Minikube is running and Kubernetes is accessible
+                    sh 'minikube status'
+
+                    // Optional: If you need to create a Minikube cluster:
+                    // sh 'minikube start'  // Uncomment if needed
+
+                    // Use kubectl with Minikube context
+                    sh 'kubectl apply -f k8s-pipeline.yml'
+
+                    // Update image using deployment name (adjust based on actual deployment name)
+                    sh 'kubectl set image deployment/css-deployment docker-jenkins=guru6910/css.c2:${BUILD_NUMBER}'
+                }
+            }
+        }
+    }
+}

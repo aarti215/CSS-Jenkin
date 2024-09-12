@@ -1,0 +1,44 @@
+pipeline {   
+    agent any
+    environment {
+        DOCKERHUB_REPO = 'guru6910/css.c2'
+    }
+    stages {
+        stage('git-checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/guru6910/CSS-jenkins.git'
+            }
+        }
+        
+        stage('docker-build') {
+            steps {
+                sh 'docker build -t guru6910/css.c2:${BUILD_NUMBER} .'
+            }
+        }
+        
+        stage('docker-push') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-cred', passwordVariable: 'passwd', usernameVariable: 'uname')]) {
+                    sh "docker login -u ${env.uname} -p ${env.passwd}"
+                    sh 'docker push guru6910/css.c2:${BUILD_NUMBER}'
+                }
+            }
+        }
+        
+        stage('deploy-k8s') {
+            steps {
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'aws-cred', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    script {
+                        sh """
+                    aws eks update-kubeconfig --name my-cluster --region ap-south-1 --kubeconfig /tmp/config
+                    kubectl apply -f k8s-pipeline.yml --kubeconfig=/tmp/config
+                    kubectl set image deployment/css-deployment docker-jenkins=guru6910/css.c2:${BUILD_NUMBER} --kubeconfig=/tmp/config
+                    """
+                    }
+                }
+            }
+        }
+    }
+}
+             
+                 
